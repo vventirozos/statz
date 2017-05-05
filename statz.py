@@ -1,23 +1,42 @@
 #!/usr/bin/python
+import argparse
 import time
 import sys
 import psycopg2
 
-if len(sys.argv) <= 3:
-    print ""
-    print "python statz.py <interval in seconds> <total duration in seconds> <database to monitor and store>"
-    print ""
-    quit()
+parser = argparse.ArgumentParser(description="Description goes here")
+parser.add_argument('-c','--connection', default="dbname=postgres", help="""Connection string for use by psycopg. Defaults to "dbname=postgres" (local socket connecting to postgres database). dbname parameter in connection string is required.""")
+parser.add_argument('-i', '--interval', default=5, help="Interval value in seconds. Default is 5 seconds.")
+parser.add_argument('-t', '--total_duration', default=600, help="Total duration in seconds to run script. Default is 10 minutes (600 seconds).")
+parser.add_argument('--debug', action="store_true", help="Show additional debugging output")
+args = parser.parse_args()
 
-step_duration = float(sys.argv[1])
-total_duration = float(sys.argv[2])
-my_db = sys.argv[3]
 
 def conn_init():
-    conn_string = "host='localhost' dbname=%s user='postgres'" % (my_db)
-    print "Connecting to database   -> %s" % (my_db)
+    global dbname
+    dbname_found = False
+    for c in args.connection.split(" "):
+        if args.debug:
+            print("connection paramter: " + str(c))
+        if c.find("dbname=") != -1:
+            dbname = c.split("=")[1]
+            dbname_found = True
+            break
+    if not dbname_found:
+        print("Missing dbname parameter in database connection string")
+        sys.exit(2)
+
+    if args.debug:
+        print "Connecting to database   -> %s" % (dbname)
+
     global conn
-    conn = psycopg2.connect(conn_string)
+    conn = psycopg2.connect(args.connection)
+#   
+global fduration
+fduration=float(args.total_duration)
+#
+global finterval
+finterval=float(args.interval)
 
 ## not using files but i'm keeping this as an example
 #def file_read():
@@ -124,9 +143,9 @@ def main_task():
             insert into statz.lock_activity select now(),* from pg_locks;
             insert into statz.table_activity select now(),* from pg_stat_user_tables;
             insert into statz.index_activity select now(),* from pg_stat_user_indexes;
-            insert into statz.database_activity select now(),* from pg_stat_database where datname = '%s' ;
+            insert into statz.database_activity select now(),* from pg_stat_database where datname = '{0}' ;
             insert into statz.bgwriter_activity select now(),* from pg_stat_bgwriter;
-            Commit;""" % (my_db)
+            Commit;""".format(dbname)
     cursor = conn.cursor()
     cursor.execute(all_statz_gather_sql)
 
@@ -159,7 +178,7 @@ def db_statz():
         (blks_read - LAG(blks_read, 1, blks_read) OVER (ORDER BY snap_date) )+0.001)) * 100 as numeric ),4) as cache_hit_ratio
         FROM statz.database_activity where snap_date in (select snap_date from statz.database_activity order by snap_date desc limit 2) limit 1 offset 1 ;
         commit;
-        """.format(step_duration)
+        """.format(finterval)
     cursor = conn.cursor()
     cursor.execute(stat_db_sql)
 
@@ -191,7 +210,7 @@ def table_statz():
     	coalesce( n_live_tup - LAG(n_live_tup, 1, n_live_tup) OVER (ORDER BY relid,snap_date) ,'0') / {0} as live_row_count_per_sec,
     	coalesce( n_dead_tup - LAG(n_dead_tup, 1, n_dead_tup) OVER (ORDER BY relid,snap_date) ,'0') / {0} as n_dead_tup_per_sec
         from statz.table_activity ) as foo where foo.interval >'0s';
-    """.format(step_duration)
+    """.format(finterval)
     cursor = conn.cursor()
     cursor.execute(table_statz_sql)
 
@@ -199,9 +218,9 @@ def run():
     conn_init()
     schema_init()
     start_time = time.time()
-    while (time.time() - start_time) < total_duration:
+    while (time.time() - start_time) < fduration:
         main_task()
-        time.sleep(step_duration)
+        time.sleep(finterval)
         db_statz()
         table_statz()
 if __name__ == "__main__":

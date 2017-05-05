@@ -14,7 +14,7 @@ total_duration = float(sys.argv[2])
 my_db = sys.argv[3]
 
 def conn_init():
-    conn_string = "host='localhost' dbname=%s user='vasilis'" % (my_db)
+    conn_string = "host='localhost' dbname=%s user='postgres'" % (my_db)
     print "Connecting to database   -> %s" % (my_db)
     global conn
     conn = psycopg2.connect(conn_string)

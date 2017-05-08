@@ -31,7 +31,7 @@ def conn_init():
 
     global conn
     conn = psycopg2.connect(args.connection)
-#   
+#
 global fduration
 fduration=float(args.total_duration)
 #
@@ -52,17 +52,17 @@ def schema_init():
             begin ;
             drop schema if exists statz cascade;
             create schema if not exists statz;
-            create table if not exists statz.index_activity as select now() as snap_date, * from pg_stat_user_indexes limit 0;
-            create table if not exists statz.stat_activity as select now() as snap_date,* from pg_stat_activity limit 0;
-            create table if not exists statz.lock_activity as select now() as snap_date,* from pg_locks limit 0;
-            create table if not exists statz.table_activity as select now() as snap_date,* from pg_stat_user_tables limit 0;
-            create table if not exists statz.database_activity as select now() as snap_date,* from pg_stat_database limit 0;
-            create table if not exists statz.bgwriter_activity as select now() as snap_date,* from pg_stat_bgwriter limit 0;
+            create table if not exists statz.index_activity as select now()::timestamp without time zone as snap_date, * from pg_stat_user_indexes limit 0;
+            create table if not exists statz.backend_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_activity limit 0;
+            create table if not exists statz.lock_activity as select now()::timestamp without time zone as snap_date,* from pg_locks limit 0;
+            create table if not exists statz.table_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_user_tables limit 0;
+            create table if not exists statz.database_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_database limit 0;
+            create table if not exists statz.bgwriter_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_bgwriter limit 0;
             CREATE TABLE If not exists statz.database_activity_agg (
-                snap_date timestamp with time zone,
-                datname name,
+                snap_date timestamp without time zone,
                 "interval" interval,
                 step interval,
+                datname name,
                 commits bigint,
                 rows_returned bigint,
                 rows_fetched bigint,
@@ -83,10 +83,10 @@ def schema_init():
                 cache_hit_ratio numeric
             );
             CREATE TABLE If not exists statz.table_activity_agg (
-                snap_date timestamp with time zone,
-                table_name text,
+                snap_date timestamp without time zone,
                 "interval" interval,
                 step interval,
+                table_name text,
                 seq_scans bigint,
                 seq_rows_read bigint,
                 index_scans bigint,
@@ -109,7 +109,8 @@ def schema_init():
                 n_dead_tup_per_sec bigint
                 );
             create view statz.table_stats_per_sec as
-                    select step,
+                    select snap_date,
+                    step,
                     table_name,
                     seq_scans_per_sec,
                     seq_rows_read_per_sec,
@@ -120,7 +121,8 @@ def schema_init():
                     rows_deleted_per_sec,
                     rows_hot_updated_per_sec from statz.table_activity_agg;
             create view statz.db_stats_per_sec as
-                    select step ,
+                    select snap_date,
+                    step ,
                     commits_per_sec ,
                     rows_returned_per_sec ,
                     rows_fetched_per_sec ,
@@ -139,12 +141,12 @@ def schema_init():
 def main_task():
     print "gathering statz.."
     all_statz_gather_sql = """
-            insert into statz.stat_activity select now(),* from pg_stat_activity;
-            insert into statz.lock_activity select now(),* from pg_locks;
-            insert into statz.table_activity select now(),* from pg_stat_user_tables;
-            insert into statz.index_activity select now(),* from pg_stat_user_indexes;
-            insert into statz.database_activity select now(),* from pg_stat_database where datname = '{0}' ;
-            insert into statz.bgwriter_activity select now(),* from pg_stat_bgwriter;
+            insert into statz.backend_activity select now()::timestamp(0),* from pg_stat_activity;
+            insert into statz.lock_activity select now()::timestamp(0),* from pg_locks;
+            insert into statz.table_activity select now()::timestamp(0),* from pg_stat_user_tables;
+            insert into statz.index_activity select now()::timestamp(0),* from pg_stat_user_indexes;
+            insert into statz.database_activity select now()::timestamp(0),* from pg_stat_database where datname = '{0}' ;
+            insert into statz.bgwriter_activity select now()::timestamp(0),* from pg_stat_bgwriter;
             Commit;""".format(dbname)
     cursor = conn.cursor()
     cursor.execute(all_statz_gather_sql)
@@ -152,9 +154,10 @@ def main_task():
 def db_statz():
     stat_db_sql = """
         insert into statz.database_activity_agg select
-        snap_date,datname,
+        snap_date,
         snap_date-LAG(snap_date, 1, snap_date) OVER (ORDER BY snap_date) AS interval,
         snap_date - (select min (snap_date) from statz.database_activity) as step,
+        datname,
         xact_commit - LAG(xact_commit, 1, xact_commit) OVER (ORDER BY snap_date) as commits,
         tup_returned - LAG(tup_returned, 1, tup_returned) OVER (ORDER BY snap_date) as rows_returned,
         tup_fetched - LAG(tup_fetched, 1, tup_fetched) OVER (ORDER BY snap_date)  as rows_fetched,
@@ -186,10 +189,11 @@ def table_statz():
     table_statz_sql = """
     insert into statz.table_activity_agg select *
         from (select
-        snap_date,schemaname||'.'||relname ,
+        snap_date,
         snap_date-LAG(snap_date, 1, snap_date) OVER (ORDER BY relid,snap_date) AS interval,
         snap_date - (select min (snap_date) from statz.table_activity) as step,
-    	coalesce( seq_scan - LAG(seq_scan, 1, seq_scan) OVER (ORDER BY relid,snap_date) ,'0') as seq_scans,
+        schemaname||'.'||relname as table_name,
+        coalesce( seq_scan - LAG(seq_scan, 1, seq_scan) OVER (ORDER BY relid,snap_date) ,'0') as seq_scans,
     	coalesce( seq_tup_read - LAG(seq_tup_read, 1, seq_tup_read) OVER (ORDER BY relid,snap_date) ,'0') as seq_rows_read ,
     	coalesce( idx_scan - LAG(idx_scan, 1, idx_scan) OVER (ORDER BY relid,snap_date) ,'0') as index_scans,
     	coalesce( idx_tup_fetch - LAG(idx_tup_fetch, 1, idx_tup_fetch) OVER (ORDER BY relid,snap_date) ,'0') as index_rows_fetched,

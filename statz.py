@@ -51,13 +51,13 @@ def schema_init():
     init_statz = """
             begin ;
             drop schema if exists statz cascade;
-            create schema if not exists statz;
-            create table if not exists statz.index_activity as select now()::timestamp without time zone as snap_date, * from pg_stat_user_indexes limit 0;
-            create table if not exists statz.backend_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_activity limit 0;
-            create table if not exists statz.lock_activity as select now()::timestamp without time zone as snap_date,* from pg_locks limit 0;
-            create table if not exists statz.table_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_user_tables limit 0;
-            create table if not exists statz.database_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_database limit 0;
-            create table if not exists statz.bgwriter_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_bgwriter limit 0;
+            create schema statz;
+            create table statz.index_activity as select now()::timestamp without time zone as snap_date, * from pg_stat_user_indexes limit 0;
+            create table statz.backend_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_activity limit 0;
+            create table statz.lock_activity as select now()::timestamp without time zone as snap_date,* from pg_locks limit 0;
+            create table statz.table_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_user_tables limit 0;
+            create table statz.database_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_database limit 0;
+            create table statz.bgwriter_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_bgwriter limit 0;
 
             CREATE view statz.database_activity_agg AS select
             snap_date,

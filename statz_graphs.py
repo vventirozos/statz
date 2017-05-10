@@ -30,7 +30,6 @@ def conn_init():
 
     if args.debug:
         print "Connecting to database   -> %s" % (dbname)
-
     conn = psycopg2.connect(args.connection)
     return conn
 
@@ -91,7 +90,7 @@ def plot_dbstatz():
     blocks_hit_cached_per_sec = values[9]
     txn_per_sec = values[10]
 #
-    plt.suptitle('Database statistics per sec', fontsize=28, fontweight='bold')
+    plt.suptitle('Database statistics / sec', fontsize=28, fontweight='bold')
     plt.subplot(3, 4, 1)
     plt.plot(time,commits_per_sec, label='Commits / sec' )
     plt.title('Commits / sec')
@@ -192,9 +191,8 @@ def plot_tablestatz(table_name):
     figure.set_size_inches(30, 15)
 
     tablefile = tabletitle + ".png"
-    print tablefile
+    #print tablefile
     plt.savefig(tablefile, dpi = 100)
-    #plt.show()
     plt.gcf().clear()
 
 def main():

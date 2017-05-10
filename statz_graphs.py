@@ -67,7 +67,8 @@ def get_dbstatz():
                 rows_deleted_per_sec,
                 blocks_read_per_sec,
                 blocks_hit_cached_per_sec,
-                txn_per_sec
+                txn_per_sec,
+                cache_hit_ratio
                 FROM statz.db_stats_per_sec;"""
     cur.execute(query)
     dbdata = cur.fetchall()
@@ -89,6 +90,7 @@ def plot_dbstatz():
     blocks_read_per_sec = values[8]
     blocks_hit_cached_per_sec = values[9]
     txn_per_sec = values[10]
+    cache_hit_ratio = values[11]
 #
     plt.suptitle('Database statistics / sec', fontsize=28, fontweight='bold')
     plt.subplot(3, 4, 1)
@@ -131,6 +133,11 @@ def plot_dbstatz():
     plt.plot(time,txn_per_sec, label='transactions / sec')
     plt.title('transactions / sec')
     plt.xticks(rotation=45)
+    plt.subplot(3, 4, 11)
+    plt.plot(time,cache_hit_ratio, label='Cache hit ratio')
+    plt.title('Cache hit ratio')
+    plt.xticks(rotation=45)
+
     plt.subplots_adjust(top=0.92, bottom=0.08, left=0.10, right=0.95, hspace=0.75,wspace=0.35) #####
     figure = plt.gcf() # get current figure
     figure.set_size_inches(30, 15)

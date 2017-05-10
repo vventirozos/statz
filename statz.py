@@ -143,7 +143,8 @@ def schema_init():
                     rows_deleted_per_sec ,
                     blocks_read_per_sec ,
                     blocks_hit_cached_per_sec ,
-                    txn_per_sec
+                    txn_per_sec,
+                    cache_hit_ratio
                     from statz.database_activity_agg
                     order by snap_date ;
 

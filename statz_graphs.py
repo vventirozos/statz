@@ -190,7 +190,7 @@ def plot_tablestatz(table_name):
     figure = plt.gcf() # get current figure
     figure.set_size_inches(30, 15)
 
-    tablefile = tabletitle + ".png"
+    tablefile = tabletitle +"_plot" + ".png"
     #print tablefile
     plt.savefig(tablefile, dpi = 100)
     plt.gcf().clear()

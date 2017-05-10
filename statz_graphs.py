@@ -14,9 +14,6 @@ parser.add_argument('-d', dest='do_db_graph', action='store_true', help="export 
 parser.add_argument('--debug', action="store_true", help="Show additional debugging output")
 args = parser.parse_args()
 
-print(args)
-
-
 def conn_init():
     global dbname
     dbname_found = False
@@ -36,15 +33,6 @@ def conn_init():
 
     conn = psycopg2.connect(args.connection)
     return conn
-
-
-#def conn_init():
-#    try:
-#        conn = psycopg2.connect(database='monkey', host='localhost', user='vasilis')
-#    except:
-#        print "Unable to connect to the database"
-#        exit(2)
-#    return conn
 
 def get_tablestatz(table_name):
     conn = conn_init()
@@ -219,10 +207,6 @@ def main():
             plot_tablestatz(table)
     else:
         exit(0)
-#    if args.table_to_graph:
-#        print "oh noes"
-#    else:
-#        print (args.table_to_graph)
 
 if __name__ == "__main__":
     main()

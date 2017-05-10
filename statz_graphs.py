@@ -2,6 +2,8 @@
 import sys
 import psycopg2
 import argparse
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tick
 import seaborn as sns

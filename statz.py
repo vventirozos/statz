@@ -60,6 +60,7 @@ def schema_init():
             create table statz.table_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_user_tables limit 0;
             create table statz.database_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_database limit 0;
             create table statz.bgwriter_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_bgwriter limit 0;
+
             create table statz.cpu_activity (
                 snap_date timestamp without time zone DEFAULT now()::timestamp(0),
                 ctx_switches bigint,
@@ -73,9 +74,7 @@ def schema_init():
                 read_count bigint,
                 write_count bigint,
                 read_bytes bigint,
-                write_bytes bigint,
-                read_time bigint,
-                write_time bigint
+                write_bytes bigint
             );
             create table statz.mem_activity (
                 snap_date timestamp without time zone DEFAULT now()::timestamp(0),
@@ -87,6 +86,19 @@ def schema_init():
                 active bigint,
                 inactive bigint
             );
+            CREATE view statz.io_activity_agg as select
+            snap_date,
+            snap_date-LAG(snap_date, 1, snap_date) OVER (ORDER BY snap_date) AS interval,
+            snap_date - (select min (snap_date) from statz.io_activity) as step,
+            read_count - LAG(read_count, 1, read_count) OVER (ORDER BY snap_date) as read_count,
+            write_count - LAG(write_count, 1, write_count) OVER (ORDER BY snap_date) as write_count,
+            read_bytes - LAG(read_bytes, 1, read_bytes) OVER (ORDER BY snap_date) as read_bytes,
+            write_bytes - LAG(write_bytes, 1, write_bytes) OVER (ORDER BY snap_date)  as write_bytes,
+            (read_count - LAG(read_count, 1, read_count) OVER (ORDER BY snap_date)) / {0}::int as read_count_per_sec,
+            (write_count - LAG(write_count, 1, write_count) OVER (ORDER BY snap_date)) / {0}::int as write_count_per_sec,
+            (read_bytes - LAG(read_bytes, 1, read_bytes) OVER (ORDER BY snap_date)) / {0}::int as read_bytes_per_sec,
+            (write_bytes - LAG(write_bytes, 1, write_bytes) OVER (ORDER BY snap_date)) / {0}::int as write_bytes_per_sec
+            FROM statz.io_activity order by snap_date;
 
             CREATE view statz.database_activity_agg AS select
             snap_date,
@@ -146,6 +158,7 @@ def schema_init():
             	coalesce( n_dead_tup - LAG(n_dead_tup, 1, n_dead_tup) OVER (ORDER BY relid,snap_date) ,'0') / {0}::int as n_dead_tup_per_sec
                 from statz.table_activity ) as foo where foo.interval >'0s';
 
+
             create view statz.table_stats_per_sec as
                     select snap_date,
                     step,
@@ -192,8 +205,8 @@ def sys_statz():
     cursor.execute('INSERT INTO statz.cpu_activity (ctx_switches, interrupts, soft_interrupts, syscalls,cpu_load) VALUES (%s, %s, %s, %s, %s) ; commit',
     (cpu_statz.ctx_switches,cpu_statz.interrupts,cpu_statz.soft_interrupts,cpu_statz.syscalls,statz_cpu_load))
 
-    cursor.execute('INSERT INTO statz.io_activity (read_count ,write_count ,read_bytes ,write_bytes ,read_time ,write_time) values (%s, %s, %s, %s, %s, %s) ; commit',
-    (io_statz.read_count,io_statz.write_count,io_statz.read_bytes,io_statz.write_bytes,io_statz.read_time,io_statz.write_time))
+    cursor.execute('INSERT INTO statz.io_activity (read_count ,write_count ,read_bytes ,write_bytes ) values (%s, %s, %s, %s) ; commit',
+    (io_statz.read_count,io_statz.write_count,io_statz.read_bytes,io_statz.write_bytes))
 
     cursor.execute('INSERT INTO statz.mem_activity (total,available,percent,used,free,active,inactive) values (%s,%s,%s,%s,%s,%s,%s) ; commit',
     (int(statz_mem.total),int(statz_mem.available),statz_mem.percent,int(statz_mem.used),int(statz_mem.free),int(statz_mem.active),
@@ -222,6 +235,7 @@ def run():
         db_statz()
         sys_statz()
         time.sleep(finterval)
+    conn.close
 #        print "work is being done.."
 if __name__ == "__main__":
     run()

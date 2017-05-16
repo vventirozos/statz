@@ -60,7 +60,7 @@ def schema_init():
             create table statz.table_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_user_tables limit 0;
             create table statz.database_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_database limit 0;
             create table statz.bgwriter_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_bgwriter limit 0;
-            create table statz.cpu_statz (
+            create table statz.cpu_activity (
                 snap_date timestamp without time zone DEFAULT now()::timestamp(0),
                 ctx_switches bigint,
                 interrupts bigint,
@@ -68,7 +68,7 @@ def schema_init():
                 syscalls bigint,
                 cpu_load numeric(4,1)
             );
-            create table statz.io_statz (
+            create table statz.io_activity (
                 snap_date timestamp without time zone DEFAULT now()::timestamp(0),
                 read_count bigint,
                 write_count bigint,
@@ -77,7 +77,7 @@ def schema_init():
                 read_time bigint,
                 write_time bigint
             );
-            create table statz.mem_statz (
+            create table statz.mem_activity (
                 snap_date timestamp without time zone DEFAULT now()::timestamp(0),
                 total bigint,
                 available bigint,
@@ -189,13 +189,13 @@ def sys_statz():
     cpu_statz = psutil.cpu_stats()
     cursor = conn.cursor()
 
-    cursor.execute('INSERT INTO statz.cpu_statz (ctx_switches, interrupts, soft_interrupts, syscalls,cpu_load) VALUES (%s, %s, %s, %s, %s) ; commit',
+    cursor.execute('INSERT INTO statz.cpu_activity (ctx_switches, interrupts, soft_interrupts, syscalls,cpu_load) VALUES (%s, %s, %s, %s, %s) ; commit',
     (cpu_statz.ctx_switches,cpu_statz.interrupts,cpu_statz.soft_interrupts,cpu_statz.syscalls,statz_cpu_load))
 
-    cursor.execute('INSERT INTO statz.io_statz (read_count ,write_count ,read_bytes ,write_bytes ,read_time ,write_time) values (%s, %s, %s, %s, %s, %s) ; commit',
+    cursor.execute('INSERT INTO statz.io_activity (read_count ,write_count ,read_bytes ,write_bytes ,read_time ,write_time) values (%s, %s, %s, %s, %s, %s) ; commit',
     (io_statz.read_count,io_statz.write_count,io_statz.read_bytes,io_statz.write_bytes,io_statz.read_time,io_statz.write_time))
 
-    cursor.execute('INSERT INTO statz.mem_statz (total,available,percent,used,free,active,inactive) values (%s,%s,%s,%s,%s,%s,%s) ; commit',
+    cursor.execute('INSERT INTO statz.mem_activity (total,available,percent,used,free,active,inactive) values (%s,%s,%s,%s,%s,%s,%s) ; commit',
     (int(statz_mem.total),int(statz_mem.available),statz_mem.percent,int(statz_mem.used),int(statz_mem.free),int(statz_mem.active),
     int(statz_mem.inactive)))
     #conn.close()

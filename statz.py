@@ -61,35 +61,30 @@ def schema_init():
             create table statz.database_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_database limit 0;
             create table statz.bgwriter_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_bgwriter limit 0;
 
-            create table statz.cpu_activity (
-                snap_date timestamp without time zone DEFAULT now()::timestamp(0),
-                ctx_switches bigint,
-                interrupts bigint,
-                soft_interrupts bigint,
-                syscalls bigint,
-                cpu_load numeric(4,1)
+            create table statz.system_activity (
+            snap_date timestamp without time zone DEFAULT (now())::timestamp(0) without time zone,
+            ctx_switches bigint,
+            interrupts bigint,
+            soft_interrupts bigint,
+            syscalls bigint,
+            cpu_load numeric(4,1),
+            read_count bigint,
+            write_count bigint,
+            read_bytes bigint,
+            write_bytes bigint,
+            total bigint,
+            available bigint,
+            mem_used_percent numeric(4,1),
+            used bigint,
+            free bigint,
+            active bigint,
+            inactive bigint
             );
-            create table statz.io_activity (
-                snap_date timestamp without time zone DEFAULT now()::timestamp(0),
-                read_count bigint,
-                write_count bigint,
-                read_bytes bigint,
-                write_bytes bigint
-            );
-            create table statz.mem_activity (
-                snap_date timestamp without time zone DEFAULT now()::timestamp(0),
-                total bigint,
-                available bigint,
-                percent numeric(4,1),
-                used bigint,
-                free bigint,
-                active bigint,
-                inactive bigint
-            );
+
             CREATE view statz.io_activity_agg as select
             snap_date,
             snap_date-LAG(snap_date, 1, snap_date) OVER (ORDER BY snap_date) AS interval,
-            snap_date - (select min (snap_date) from statz.io_activity) as step,
+            snap_date - (select min (snap_date) from statz.system_activity) as step,
             read_count - LAG(read_count, 1, read_count) OVER (ORDER BY snap_date) as read_count,
             write_count - LAG(write_count, 1, write_count) OVER (ORDER BY snap_date) as write_count,
             read_bytes - LAG(read_bytes, 1, read_bytes) OVER (ORDER BY snap_date) as read_bytes,
@@ -98,7 +93,7 @@ def schema_init():
             (write_count - LAG(write_count, 1, write_count) OVER (ORDER BY snap_date)) / {0}::int as write_count_per_sec,
             (read_bytes - LAG(read_bytes, 1, read_bytes) OVER (ORDER BY snap_date)) / {0}::int as read_bytes_per_sec,
             (write_bytes - LAG(write_bytes, 1, write_bytes) OVER (ORDER BY snap_date)) / {0}::int as write_bytes_per_sec
-            FROM statz.io_activity order by snap_date;
+            FROM statz.system_activity order by snap_date;
 
             CREATE view statz.database_activity_agg AS select
             snap_date,
@@ -201,17 +196,14 @@ def sys_statz():
     statz_cpu_load = psutil.cpu_percent(interval=0, percpu=False)
     cpu_statz = psutil.cpu_stats()
     cursor = conn.cursor()
-
-    cursor.execute('INSERT INTO statz.cpu_activity (ctx_switches, interrupts, soft_interrupts, syscalls,cpu_load) VALUES (%s, %s, %s, %s, %s) ; commit',
-    (cpu_statz.ctx_switches,cpu_statz.interrupts,cpu_statz.soft_interrupts,cpu_statz.syscalls,statz_cpu_load))
-
-    cursor.execute('INSERT INTO statz.io_activity (read_count ,write_count ,read_bytes ,write_bytes ) values (%s, %s, %s, %s) ; commit',
-    (io_statz.read_count,io_statz.write_count,io_statz.read_bytes,io_statz.write_bytes))
-
-    cursor.execute('INSERT INTO statz.mem_activity (total,available,percent,used,free,active,inactive) values (%s,%s,%s,%s,%s,%s,%s) ; commit',
-    (int(statz_mem.total),int(statz_mem.available),statz_mem.percent,int(statz_mem.used),int(statz_mem.free),int(statz_mem.active),
-    int(statz_mem.inactive)))
-    #conn.close()
+    cursor.execute('INSERT INTO statz.system_activity \
+    (ctx_switches,interrupts,soft_interrupts,syscalls,cpu_load,read_count,write_count, \
+    read_bytes,write_bytes,total,available,mem_used_percent,used,free,active,inactive ) \
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ; commit',
+    (cpu_statz.ctx_switches,cpu_statz.interrupts,cpu_statz.soft_interrupts,cpu_statz.syscalls,statz_cpu_load,
+    io_statz.read_count,io_statz.write_count,io_statz.read_bytes,io_statz.write_bytes,
+    int(statz_mem.total),int(statz_mem.available),statz_mem.percent,int(statz_mem.used),
+    int(statz_mem.free),int(statz_mem.active),int(statz_mem.inactive)))
 
 def db_statz():
     all_statz_gather_sql = """

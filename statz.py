@@ -3,6 +3,8 @@ import argparse
 import time
 import sys
 import psycopg2
+import psutil
+
 
 parser = argparse.ArgumentParser(description="Description goes here")
 parser.add_argument('-c','--connection', default="dbname=postgres", help="""Connection string for use by psycopg. Defaults to "dbname=postgres" (local socket connecting to postgres database). dbname parameter in connection string is required.""")
@@ -58,6 +60,33 @@ def schema_init():
             create table statz.table_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_user_tables limit 0;
             create table statz.database_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_database limit 0;
             create table statz.bgwriter_activity as select now()::timestamp without time zone as snap_date,* from pg_stat_bgwriter limit 0;
+            create table statz.cpu_statz (
+                snap_date timestamp without time zone DEFAULT now()::timestamp(0),
+                ctx_switches bigint,
+                interrupts bigint,
+                soft_interrupts bigint,
+                syscalls bigint,
+                cpu_load numeric(4,1)
+            );
+            create table statz.io_statz (
+                snap_date timestamp without time zone DEFAULT now()::timestamp(0),
+                read_count bigint,
+                write_count bigint,
+                read_bytes bigint,
+                write_bytes bigint,
+                read_time bigint,
+                write_time bigint
+            );
+            create table statz.mem_statz (
+                snap_date timestamp without time zone DEFAULT now()::timestamp(0),
+                total bigint,
+                available bigint,
+                percent numeric(4,1),
+                used bigint,
+                free bigint,
+                active bigint,
+                inactive bigint
+            );
 
             CREATE view statz.database_activity_agg AS select
             snap_date,
@@ -152,8 +181,26 @@ def schema_init():
     cursor = conn.cursor()
     cursor.execute(init_statz)
 
+def sys_statz():
+    conn_init()
+    io_statz = psutil.disk_io_counters(perdisk=False)
+    statz_mem = psutil.virtual_memory()
+    statz_cpu_load = psutil.cpu_percent(interval=0, percpu=False)
+    cpu_statz = psutil.cpu_stats()
+    cursor = conn.cursor()
 
-def main_task():
+    cursor.execute('INSERT INTO statz.cpu_statz (ctx_switches, interrupts, soft_interrupts, syscalls,cpu_load) VALUES (%s, %s, %s, %s, %s) ; commit',
+    (cpu_statz.ctx_switches,cpu_statz.interrupts,cpu_statz.soft_interrupts,cpu_statz.syscalls,statz_cpu_load))
+
+    cursor.execute('INSERT INTO statz.io_statz (read_count ,write_count ,read_bytes ,write_bytes ,read_time ,write_time) values (%s, %s, %s, %s, %s, %s) ; commit',
+    (io_statz.read_count,io_statz.write_count,io_statz.read_bytes,io_statz.write_bytes,io_statz.read_time,io_statz.write_time))
+
+    cursor.execute('INSERT INTO statz.mem_statz (total,available,percent,used,free,active,inactive) values (%s,%s,%s,%s,%s,%s,%s) ; commit',
+    (int(statz_mem.total),int(statz_mem.available),statz_mem.percent,int(statz_mem.used),int(statz_mem.free),int(statz_mem.active),
+    int(statz_mem.inactive)))
+    #conn.close()
+
+def db_statz():
     all_statz_gather_sql = """
             insert into statz.backend_activity select now()::timestamp(0),* from pg_stat_activity;
             insert into statz.lock_activity select now()::timestamp(0),* from pg_locks;
@@ -172,7 +219,8 @@ def run():
     print "Gathering statz, standby.."
     start_time = time.time()
     while (time.time() - start_time) < fduration:
-        main_task()
+        db_statz()
+        sys_statz()
         time.sleep(finterval)
 #        print "work is being done.."
 if __name__ == "__main__":

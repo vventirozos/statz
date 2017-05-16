@@ -12,7 +12,6 @@ sns.set_style("whitegrid")
 parser = argparse.ArgumentParser(description="Description goes here")
 parser.add_argument('-c','--connection', default="dbname=postgres", help="""Connection string for use by psycopg. Defaults to "dbname=postgres" (local socket connecting to postgres database). dbname parameter in connection string is required.""")
 parser.add_argument('-t', dest='table_to_graph', nargs='*', help="Table you want to get graphs for.")
-parser.add_argument('-d', dest='do_db_graph', action='store_true', help="export db graphs")
 parser.add_argument('--debug', action="store_true", help="Show additional debugging output")
 args = parser.parse_args()
 
@@ -76,6 +75,74 @@ def get_dbstatz():
     dbdata = cur.fetchall()
     conn.close()
     return dbdata
+
+def get_sysstatz():
+    conn = conn_init()
+    cur = conn.cursor()
+    sys_query = """
+                select
+                snap_date,
+                cpu_load,
+                interrupts,
+                (read_bytes / 1024)/1024,
+                (write_bytes / 1024)/1024,
+                (used / 1024)/1024 as ram_used_mb,
+                (free / 1024)/1024 as ram_free_mb
+                from statz.system_activity
+                order by 1
+    """
+    cur.execute(sys_query)
+    sys_data = cur.fetchall()
+    conn.close()
+    return sys_data
+
+def plot_sysstatz():
+    sys_data = get_sysstatz()
+    values = zip(*sys_data)
+
+    time = values[0]
+    cpu_load = values[1]
+    interrupts = values[2]
+    read_Mbytes_per_sec = values[3]
+    write_Mbytes_per_sec = values[4]
+    ram_used_mb = values[5]
+    ram_free_mb = values[6]
+
+
+    plt.suptitle('System statistics', fontsize=28, fontweight='bold')
+    plt.subplot(3, 2, 2)
+    plt.plot(time,interrupts, label='Interrupts' )
+    plt.title('Interrupts')
+    plt.xticks(rotation=45)
+    plt.subplot(3, 2, 1)
+    plt.plot(time,cpu_load, label='CPU load')
+    plt.title('CPU load')
+    plt.xticks(rotation=45)
+    plt.subplot(3, 2, 5)
+    plt.plot(time,ram_used_mb, label='RAM used (mb)')
+    plt.title('RAM used (mb)')
+    plt.xticks(rotation=45)
+    plt.subplot(3, 2, 6)
+    plt.plot(time,ram_free_mb, label='RAM free (mb)')
+    plt.title('RAM free (mb)')
+    plt.xticks(rotation=45)
+    plt.subplot(3, 2, 3)
+    plt.plot(time,read_Mbytes_per_sec, label='IO read (mb)')
+    plt.title('IO read (mb)')
+    plt.xticks(rotation=45)
+    plt.subplot(3, 2, 4)
+    plt.plot(time,write_Mbytes_per_sec, label='IO write (mb)')
+    plt.title('IO write (mb)')
+    plt.xticks(rotation=45)
+
+    plt.subplots_adjust(top=0.90, bottom=0.08, left=0.05, right=0.95, hspace=0.45,wspace=0.15) #####
+    figure = plt.gcf() # get current figure
+    figure.set_size_inches(30, 15)
+    plt.savefig("sys_plot.png", dpi = 100)
+    #plt.show()
+    plt.gcf().clear()
+
+
 
 def plot_dbstatz():
     dbdata = get_dbstatz()
@@ -208,8 +275,8 @@ def plot_tablestatz(table_name):
 def main():
     tablez = []
     tablez = args.table_to_graph
-    if args.do_db_graph is True:
-        plot_dbstatz()
+    plot_dbstatz()
+    plot_sysstatz()
     if tablez:
         for table in tablez:
             plot_tablestatz(table)
